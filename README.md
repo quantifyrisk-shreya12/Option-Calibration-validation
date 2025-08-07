@@ -257,13 +257,7 @@ The application provides comprehensive validation metrics:
 ✅ **Performance Optimization** - JIT compilation, vectorization  
 ✅ **Professional Documentation** - Code documentation, user guides  
 
-## 📞 Contact & Contributing
 
-### **Author**
-**Your Name** - Quantitative Finance Professional  
-📧 Email: your.email@domain.com  
-💼 LinkedIn: [Your LinkedIn Profile]  
-🌐 Portfolio: [Your Portfolio Website]  
 
 ### **Contributing**
 Contributions are welcome! Please follow these steps:
@@ -274,9 +268,6 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -292,6 +283,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **⭐ If you found this project helpful, please give it a star!**
 
-[![GitHub stars](https://img.shields.io/github/stars/your-username/option-pricing-validation?style=social)](https://github.com/your-username/option-pricing-validation/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/your-username/option-pricing-validation?style=social)](https://github.com/quantifyrisk-shreya12/Option-Calibration-validation/stargazers)
 
 </div>
