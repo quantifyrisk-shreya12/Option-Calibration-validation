@@ -595,7 +595,8 @@ def main():
         
         # Stock selection
         st.markdown("### 📈 Asset Selection")
-        selected_stock = st.selectbox("Choose underlying asset:", ["AAPL", "MSFT", "GOOGL", "TSLA"])
+        #selected_stock = st.selectbox("Choose underlying asset:", ["AAPL", "MSFT", "GOOGL", "TSLA"])
+        selected_stock = st.selectbox("Choose underlying asset:", ["CBK.DE", "AAPL", "MSFT", "GOOGL", "TSLA" ])
         
         # Add Commerzbank info box
         st.markdown("""
