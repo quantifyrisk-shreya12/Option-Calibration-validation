@@ -379,33 +379,67 @@ try:
 except ImportError:
     pass
 
-def european_Heston_FFT_fast(S0, K_array, T, r, gam0, kappa, lamb, sig_tilde, rho, alpha=1.5, N=2**13):
+# def european_Heston_FFT_fast(S0, K_array, T, r, gam0, kappa, lamb, sig_tilde, rho, alpha=1.5, N=2**13):
+#     """
+#     Vectorised Heston call pricing via FFT (Carr-Madan).
+#     Handles an *array* of strikes in one shot.
+#     """
+#     log_moneyness = np.log(K_array / S0)  # log(K/S)
+#     M = len(log_moneyness)
+#     dk = 2 * alpha / (N - 1)
+#     k = alpha - (N // 2) * dk + dk * np.arange(N)
+#     i = 1j
+
+#     # Heston characteristic function
+#     # def heston_char(u, S0, T, r, gam0, kappa, lamb, sig_tilde, rho):
+#     #     xi = kappa - lamb * rho * sig_tilde * i * u
+#     #     d = np.sqrt(xi**2 - sig_tilde**2 * (u**2 + i * u))
+#     #     g = (xi - d) / (xi + d)
+#     #     C = r * i * u * T + (gam0 / sig_tilde**2) * ((xi - d) * T - 2 * np.log((1 - g * np.exp(-d * T)) / (1 - g)))
+#     #     D = ((xi - d) / sig_tilde**2) * ((1 - np.exp(-d * T)) / (1 - g * np.exp(-d * T)))
+#     #     return np.exp(C + D * gam0 + i * u * np.log(S0))
+
+#     # Evaluate characteristic function
+#     phi = heston_char(k, S0, T, r, gam0, kappa, lamb, sig_tilde, rho)
+
+#     psi = phi / (alpha**2 - (k - alpha)**2 + 1j * (2 * alpha + 1) * (k - alpha))
+#     y = np.fft.fft(psi * np.exp(-1j * k * np.log(S0)))
+#     cT = np.real(y) * dk / (2 * np.pi)
+#     cT = np.interp(log_moneyness, k[:len(log_moneyness)], cT[:len(log_moneyness)])
+#     return np.exp(log_moneyness) * cT
+
+
+
+
+def european_Heston_FFT_fast(S0, K_array, T, r, gam0, kappa, lamb, sig_tilde, rho, alpha=1.5, N=2**12, dk=0.01):
     """
-    Vectorised Heston call pricing via FFT (Carr-Madan).
+    Corrected and robust vectorised Heston call pricing via FFT (Carr-Madan).
     Handles an *array* of strikes in one shot.
     """
-    log_moneyness = np.log(K_array / S0)  # log(K/S)
-    M = len(log_moneyness)
-    dk = 2 * alpha / (N - 1)
-    k = alpha - (N // 2) * dk + dk * np.arange(N)
-    i = 1j
-
-    # Heston characteristic function
-    def heston_char(u, S0, T, r, gam0, kappa, lamb, sig_tilde, rho):
-        xi = kappa - lamb * rho * sig_tilde * i * u
-        d = np.sqrt(xi**2 - sig_tilde**2 * (u**2 + i * u))
-        g = (xi - d) / (xi + d)
-        C = r * i * u * T + (gam0 / sig_tilde**2) * ((xi - d) * T - 2 * np.log((1 - g * np.exp(-d * T)) / (1 - g)))
-        D = ((xi - d) / sig_tilde**2) * ((1 - np.exp(-d * T)) / (1 - g * np.exp(-d * T)))
-        return np.exp(C + D * gam0 + i * u * np.log(S0))
-
-    # Evaluate characteristic function
-    phi = heston_char(k, S0, T, r, gam0, kappa, lamb, sig_tilde, rho)
-    psi = phi / (alpha**2 - (k - alpha)**2 + 1j * (2 * alpha + 1) * (k - alpha))
-    y = np.fft.fft(psi * np.exp(-1j * k * np.log(S0)))
-    cT = np.real(y) * dk / (2 * np.pi)
-    cT = np.interp(log_moneyness, k[:len(log_moneyness)], cT[:len(log_moneyness)])
-    return np.exp(log_moneyness) * cT
+    # Ensure K_array is a numpy array
+    K_array = np.asarray(K_array)
+    log_S0 = np.log(S0)
+    log_K = np.log(K_array)
+    
+    # Grid for valuation
+    k = np.arange(N) * dk
+    v = k - (alpha + 1) * 1j
+    
+    # Characteristic function evaluation
+    # This now correctly calls the global, Numba-jitted function
+    phi = heston_char(v, S0, T, r, gam0, kappa, lamb, sig_tilde, rho)
+    
+    # The pricing transform
+    psi = phi * np.exp(-r * T) / ((alpha + 1j * k) * (alpha + 1j * k + 1))
+    
+    # FFT calculation
+    fft_y = np.fft.fft(psi * np.exp(1j * k * (log_S0)))
+    
+    # Calculate option prices
+    # We use linear interpolation to find the prices for the specific strikes required
+    C = np.exp(-alpha * log_K) / np.pi * np.interp(log_K, log_S0 + 2*np.pi*np.arange(N)/(N*dk), np.real(fft_y))
+    
+    return C
 
 # ============================================================================
 # GREEKS CALCULATIONS
@@ -453,18 +487,42 @@ def calculate_metrics(observed, predicted):
 # ------------------------------------------------------------------
 # HESTON CALIBRATION – MLE + MSE HYBRID
 # ------------------------------------------------------------------
+# def heston_log_likelihood(params, market_prices, strikes, S0, T, r):
+#     """Negative log-likelihood for Heston under Gaussian errors."""
+#     gam0, kappa, lamb, sig_tilde, rho = params
+#     try:
+#         model_prices = european_Heston_FFT_fast(S0, strikes, T, r,
+#                                                 gam0, kappa, lamb, sig_tilde, rho)
+#         # Gaussian log-likelihood with fixed σ=1% of market price
+#         sigma = 0.01 * market_prices
+#         return 0.5 * np.sum(((market_prices - model_prices) / sigma)**2 +
+#                             np.log(2 * np.pi * sigma**2))
+#     except Exception:
+#         return 1e12
+
+
 def heston_log_likelihood(params, market_prices, strikes, S0, T, r):
-    """Negative log-likelihood for Heston under Gaussian errors."""
+    """
+    Negative log-likelihood for Heston under Gaussian errors.
+    The error-hiding try-except block has been removed for better debugging.
+    """
     gam0, kappa, lamb, sig_tilde, rho = params
-    try:
-        model_prices = european_Heston_FFT_fast(S0, strikes, T, r,
-                                                gam0, kappa, lamb, sig_tilde, rho)
-        # Gaussian log-likelihood with fixed σ=1% of market price
-        sigma = 0.01 * market_prices
-        return 0.5 * np.sum(((market_prices - model_prices) / sigma)**2 +
-                            np.log(2 * np.pi * sigma**2))
-    except Exception:
-        return 1e12
+    
+    # If the optimizer proposes invalid parameters (e.g., negative variance),
+    # the pricing function may raise a ValueError. We let this happen so the
+    # optimizer knows this is an invalid region.
+    model_prices = european_Heston_FFT_fast(S0, strikes, T, r,
+                                            gam0, kappa, lamb, sig_tilde, rho)
+                                            
+    # Avoid division by zero or log of zero if model_prices become zero or negative
+    if np.any(model_prices <= 0):
+        return 1e12 # Return a large penalty for non-physical prices
+
+    # Gaussian log-likelihood with fixed error sigma (e.g., 1% of market price)
+    # This part remains the same.
+    error_sigma = 0.01 * market_prices
+    return 0.5 * np.sum(((market_prices - model_prices) / error_sigma)**2 +
+                        np.log(2 * np.pi * error_sigma**2))
 
 def calibrate_heston(market_prices, strikes, S0, T, r):
     """Hybrid MSE + MLE calibration."""
